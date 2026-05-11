@@ -4,10 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:house_of_tales_flutter_app/app/app.dart';
 import 'package:house_of_tales_flutter_app/app/providers.dart';
 import 'package:house_of_tales_flutter_app/core/config/app_environment.dart';
+import 'package:house_of_tales_flutter_app/shared/models/story.dart';
 import 'package:house_of_tales_flutter_app/shared/models/subscription_status.dart';
 import 'package:house_of_tales_flutter_app/shared/models/ui_language.dart';
 import 'package:house_of_tales_flutter_app/shared/widgets/story_shelf_card.dart';
-import 'package:house_of_tales_flutter_app/shared/models/story.dart';
 
 Widget _app({List<Override> overrides = const []}) {
   return ProviderScope(
@@ -21,6 +21,16 @@ Widget _app({List<Override> overrides = const []}) {
 
 Future<void> _completeOnboarding(WidgetTester tester) async {
   await tester.tap(find.text('Start mock session'));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.widgetWithText(TextFormField, 'Enter PIN'),
+    '1234',
+  );
+  await tester.enterText(
+    find.widgetWithText(TextFormField, 'Confirm PIN'),
+    '1234',
+  );
+  await tester.drag(find.byType(ListView), const Offset(0, -900));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Start reading'));
   await tester.pumpAndSettle();
@@ -51,6 +61,50 @@ void main() {
     expect(find.text('The Moon Rabbit Pillow'), findsOneWidget);
   });
 
+  testWidgets('onboarding requires birth month/year and matching parent PIN', (
+    tester,
+  ) async {
+    await usePhonePortrait(tester);
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start mock session'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Birth month'), findsOneWidget);
+    expect(find.text('Birth year'), findsOneWidget);
+    expect(find.text('Age'), findsNothing);
+    expect(find.text('Set your Parent PIN'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Enter PIN'),
+      '1234',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm PIN'),
+      '9999',
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start reading'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PINs do not match. Try again.'), findsOneWidget);
+    expect(find.text('Today’s story shelf'), findsNothing);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm PIN'),
+      '1234',
+    );
+    await tester.ensureVisible(find.text('Start reading'));
+    await tester.drag(find.byType(ListView), const Offset(0, -80));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start reading'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Today’s story shelf'), findsOneWidget);
+  });
+
   testWidgets('story shelf card exposes preview/full access state', (
     tester,
   ) async {
@@ -76,9 +130,7 @@ void main() {
     expect(find.text('Preview'), findsOneWidget);
   });
 
-  testWidgets('reader shows preview paywall when family access is not active', (
-    tester,
-  ) async {
+  testWidgets('reader holds preview users at page three gate', (tester) async {
     await usePhonePortrait(tester);
     await tester.pumpWidget(
       _app(
@@ -99,12 +151,20 @@ void main() {
     await tester.tap(find.text('Read'));
     await tester.pumpAndSettle();
 
+    expect(find.text('1/6'), findsOneWidget);
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
+    expect(find.text('2/6'), findsOneWidget);
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
+    expect(find.text('3/6'), findsOneWidget);
 
     expect(find.text('Continue with family access'), findsOneWidget);
     expect(find.text('Payments not enabled'), findsOneWidget);
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.text('3/6'), findsOneWidget);
+    expect(find.text('4/6'), findsNothing);
   });
 }

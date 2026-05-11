@@ -32,13 +32,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     return storyAsync.when(
       data: (story) {
-        final page = story.pages[_pageIndex];
         final hasFullAccess =
             subscription.hasFullAccess ||
             story.access.status == EntitlementStatus.fullAccess;
+        final previewHoldPage = story.access.previewPages + 1;
+        final maxReachableIndex = hasFullAccess
+            ? story.pages.length - 1
+            : story.pages.lastIndexWhere(
+                (page) => page.pageNumber <= previewHoldPage,
+              );
+        final safePageIndex = _pageIndex > maxReachableIndex
+            ? maxReachableIndex
+            : _pageIndex;
+        final page = story.pages[safePageIndex];
         final gatedAfterPartial = !hasFullAccess && page.isGatedAfterPartial;
-        final blocked =
-            !hasFullAccess && page.pageNumber > story.access.previewPages + 1;
 
         return Scaffold(
           appBar: AppBar(
@@ -83,25 +90,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                if (blocked)
+                StoryTextPanel(
+                  text: page.text.inLanguage(language),
+                  partial: gatedAfterPartial,
+                ),
+                if (gatedAfterPartial) ...[
+                  const SizedBox(height: AppSpacing.md),
                   ParentGateCard(
                     title: context.l10n.readerGateTitle,
                     body: context.l10n.readerGateBody,
                     paymentsEnabled: environment.paymentsEnabled,
-                  )
-                else ...[
-                  StoryTextPanel(
-                    text: page.text.inLanguage(language),
-                    partial: gatedAfterPartial,
                   ),
-                  if (gatedAfterPartial) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    ParentGateCard(
-                      title: context.l10n.readerGateTitle,
-                      body: context.l10n.readerGateBody,
-                      paymentsEnabled: environment.paymentsEnabled,
-                    ),
-                  ],
                 ],
                 const SizedBox(height: AppSpacing.lg),
                 LinearProgressIndicator(
@@ -118,7 +117,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _pageIndex == 0
                             ? null
-                            : () => setState(() => _pageIndex -= 1),
+                            : () => setState(
+                                () => _pageIndex = safePageIndex - 1,
+                              ),
                         icon: const Icon(Icons.arrow_back_rounded),
                         label: const Text('Back'),
                       ),
@@ -126,9 +127,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _pageIndex >= story.pages.length - 1
+                        onPressed: safePageIndex >= maxReachableIndex
                             ? null
-                            : () => setState(() => _pageIndex += 1),
+                            : () => setState(
+                                () => _pageIndex = safePageIndex + 1,
+                              ),
                         icon: const Icon(Icons.arrow_forward_rounded),
                         label: const Text('Next'),
                       ),
